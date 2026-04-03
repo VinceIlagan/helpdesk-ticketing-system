@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import TicketCard from "@/components/tickets/TicketCard";
 import { Ticket } from "@/types";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,7 @@ export default async function UserDashboard() {
             <span className="text-sm text-gray-500">
               {profile?.full_name}
             </span>
+            <NotificationBell userId={user.id} />
             <LogoutButton />
           </div>
         </div>

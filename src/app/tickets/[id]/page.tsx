@@ -2,8 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { StatusBadge, PriorityBadge } from "@/components/tickets/TicketStatusBadge";
+import AdminTicketActions from "../../../components/tickets/AdminTicketActions";
+import CommentForm from "@/components/comments/CommentForm";
+import CommentList from "@/components/comments/CommentList";
+import { Comment } from "@/types";
 import { formatDistanceToNow, format } from "date-fns";
-import AdminTicketActions from "@/components/tickets/AdminTicketActions";
+
+export const dynamic = "force-dynamic";
 
 export default async function TicketDetailPage({
   params,
@@ -30,7 +35,6 @@ export default async function TicketDetailPage({
 
   if (!ticket) notFound();
 
-  // Only allow access to own tickets (unless admin)
   if (profile?.role !== "admin" && ticket.created_by !== user.id) {
     redirect("/dashboard/user");
   }
@@ -46,14 +50,13 @@ export default async function TicketDetailPage({
     .select("*")
     .eq("ticket_id", id);
 
-    // Fetch all admins (for assignment dropdown)
-    const { data: admins } = await supabase
-  .from("profiles")
-  .select("*")
-  .eq("role", "admin");
+  const { data: admins } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("role", "admin");
 
-  const backHref =
-    profile?.role === "admin" ? "/dashboard/admin" : "/dashboard/user";
+  const isAdmin = profile?.role === "admin";
+  const backHref = isAdmin ? "/dashboard/admin" : "/dashboard/user";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -67,6 +70,11 @@ export default async function TicketDetailPage({
               </svg>
             </div>
             <span className="font-semibold text-gray-900">HelpDesk</span>
+            {isAdmin && (
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                Admin
+              </span>
+            )}
           </div>
           <Link
             href={backHref}
@@ -82,12 +90,16 @@ export default async function TicketDetailPage({
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+
             {/* Ticket Header */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6">
               <div className="flex items-start justify-between gap-4 mb-4">
-                <h1 className="text-xl font-bold text-gray-900">{ticket.title}</h1>
+                <h1 className="text-xl font-bold text-gray-900">
+                  {ticket.title}
+                </h1>
                 <StatusBadge status={ticket.status} />
               </div>
               <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">
@@ -97,7 +109,9 @@ export default async function TicketDetailPage({
               {/* Attachments */}
               {attachments && attachments.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-xs font-medium text-gray-500 mb-2">ATTACHMENTS</p>
+                  <p className="text-xs font-medium text-gray-500 mb-2">
+                    ATTACHMENTS
+                  </p>
                   <div className="space-y-2">
                     {attachments.map((attachment) => (
                       <a
@@ -118,95 +132,89 @@ export default async function TicketDetailPage({
               )}
             </div>
 
-            {/* Comments */}
+            {/* Comments Section */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-900 mb-4">
-                Comments ({comments?.length ?? 0})
+              <h2 className="font-semibold text-gray-900 mb-6">
+                Replies ({comments?.filter(c => isAdmin || !c.is_internal).length ?? 0})
               </h2>
 
-              {comments && comments.length > 0 ? (
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                        <span className="text-xs font-medium text-blue-700">
-                          {comment.profiles?.full_name?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium text-gray-900">
-                            {comment.profiles?.full_name}
-                          </span>
-                          {comment.profiles?.role === "admin" && (
-                            <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
-                              Support
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-400">
-                            {formatDistanceToNow(new Date(comment.created_at), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-                          {comment.content}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 text-center py-4">
-                  No comments yet.
-                </p>
-              )}
+              {/* Comment List */}
+              <CommentList
+                comments={(comments ?? []) as Comment[]}
+                isAdmin={isAdmin}
+              />
 
-              {/* Add Comment Form - placeholder for Phase 7 */}
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-400 text-center">
-                  Comment feature coming in Phase 7
-                </p>
+              {/* Divider */}
+              <div className="border-t border-gray-100 mt-6 pt-6">
+                {/* Comment Form */}
+                <CommentForm
+                  ticketId={ticket.id}
+                  isAdmin={isAdmin}
+                />
               </div>
             </div>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-4">
-            {/* Admin Actions — only visible to admins */}
-            {profile?.role === "admin" && (
-                <AdminTicketActions
+            {/* Admin Actions */}
+            {isAdmin && (
+              <AdminTicketActions
                 ticketId={ticket.id}
                 currentStatus={ticket.status}
                 currentAssignedTo={ticket.assigned_to}
                 admins={admins ?? []}
-                />
+              />
             )}
+
+            {/* Ticket Details */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Ticket Details</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                Ticket Details
+              </h3>
               <div className="space-y-3">
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">
+                    Status
+                  </p>
                   <StatusBadge status={ticket.status} className="mt-1" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Priority</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">
+                    Priority
+                  </p>
                   <PriorityBadge priority={ticket.priority} className="mt-1" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Submitted by</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">
+                    Submitted by
+                  </p>
                   <p className="text-sm text-gray-700 mt-1">
                     {ticket.profiles?.full_name}
                   </p>
                 </div>
+                {ticket.assigned_to && (
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide">
+                      Assigned to
+                    </p>
+                    <p className="text-sm text-gray-700 mt-1">
+                      {admins?.find((a) => a.id === ticket.assigned_to)?.full_name ?? "Unknown"}
+                    </p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Created</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">
+                    Created
+                  </p>
                   <p className="text-sm text-gray-700 mt-1">
                     {format(new Date(ticket.created_at), "MMM d, yyyy h:mm a")}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Last Updated</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">
+                    Last Updated
+                  </p>
                   <p className="text-sm text-gray-700 mt-1">
                     {formatDistanceToNow(new Date(ticket.updated_at), {
                       addSuffix: true,

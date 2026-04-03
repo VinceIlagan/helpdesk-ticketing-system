@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StatusBadge, PriorityBadge } from "@/components/tickets/TicketStatusBadge";
 import { formatDistanceToNow } from "date-fns";
 import AdminTicketFilters from "../../../components/tickets/AdminTicketFilters";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,7 @@ export default async function AdminDashboard({
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-500">{profile?.full_name}</span>
+            <NotificationBell userId={user.id} />
             <form action="/auth/logout" method="POST">
               <button className="text-sm text-gray-500 hover:text-red-600 transition-colors">
                 Sign out
