@@ -25,23 +25,41 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // If not logged in and trying to access protected routes, redirect to login
-  const isAuthPage = request.nextUrl.pathname.startsWith("/auth");
+  const isAuthPage =
+    request.nextUrl.pathname.startsWith("/auth/login") ||
+    request.nextUrl.pathname.startsWith("/auth/register");
+
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/tickets");
 
+  const isRootPage = request.nextUrl.pathname === "/";
+
+  // No user — redirect to login if on protected route
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
-    return NextResponse.redirect(url);
+
+    const redirectResponse = NextResponse.redirect(url);
+
+    // Clear any stale cookies
+    request.cookies.getAll().forEach((cookie) => {
+      if (cookie.name.startsWith("sb-")) {
+        redirectResponse.cookies.set(cookie.name, "", {
+          expires: new Date(0),
+          path: "/",
+        });
+      }
+    });
+
+    return redirectResponse;
   }
 
-  if (user && isAuthPage) {
+  // User logged in — redirect away from auth pages
+  if (user && (isAuthPage || isRootPage)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard/user";
     return NextResponse.redirect(url);
