@@ -28,6 +28,14 @@ export default function CommentForm({ ticketId, isAdmin }: CommentFormProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Get current user's profile
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("role, full_name")
+        .eq("id", user.id)
+        .single();
+
+      // Insert the comment
       const { error } = await supabase.from("comments").insert({
         ticket_id: ticketId,
         author_id: user.id,
@@ -35,38 +43,47 @@ export default function CommentForm({ ticketId, isAdmin }: CommentFormProps) {
         is_internal: isAdmin ? isInternal : false,
       });
 
-if (error) throw error;
+      if (error) throw error;
 
-// Create notification for ticket owner
-const { data: ticket } = await supabase
-  .from("tickets")
-  .select("created_by, title")
-  .eq("id", ticketId)
-  .single();
+      // Get ticket details
+      const { data: ticket } = await supabase
+        .from("tickets")
+        .select("created_by, title")
+        .eq("id", ticketId)
+        .single();
 
-console.log("=== NOTIFICATION DEBUG ===");
-console.log("Current user:", user.id);
-console.log("Ticket owner:", ticket?.created_by);
-console.log("Should notify:", ticket?.created_by !== user.id);
+      if (ticket) {
+        if (currentProfile?.role === "admin") {
+          // Admin replied → notify the ticket owner (user)
+          if (ticket.created_by !== user.id) {
+            await supabase.from("notifications").insert({
+              user_id: ticket.created_by,
+              message: `Support replied on your ticket: "${ticket.title}"`,
+              ticket_id: ticketId,
+            });
+          }
+        } else {
+          // User replied → notify all admins
+          const { data: admins } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("role", "admin");
 
-if (ticket && ticket.created_by !== user.id) {
-  const { error: notifError } = await supabase
-    .from("notifications")
-    .insert({
-      user_id: ticket.created_by,
-      message: `New reply on your ticket: "${ticket.title}"`,
-      ticket_id: ticketId,
-    });
-
-  console.log("Notification error:", notifError);
-}
-console.log("=========================");
+          if (admins && admins.length > 0) {
+            await supabase.from("notifications").insert(
+              admins.map((admin) => ({
+                user_id: admin.id,
+                message: `${currentProfile?.full_name ?? "A user"} replied on ticket: "${ticket.title}"`,
+                ticket_id: ticketId,
+              }))
+            );
+          }
+        }
+      }
 
       toast.success("Comment added!");
       setContent("");
       setIsInternal(false);
-
-      // Refresh the page to show new comment
       window.location.reload();
     } catch (error: unknown) {
       const message =
